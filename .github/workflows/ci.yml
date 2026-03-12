@@ -1,0 +1,127 @@
+name: ci
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    name: Generate README docs
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show module version
+        run: cat VERSION
+
+      - name: Generate Terraform Docs
+        uses: terraform-docs/gh-actions@v1.4.1
+        with:
+          working-dir: .
+          config-file: .terraform-docs.yml
+          output-file: README.md
+          output-method: inject
+          git-push: true
+
+  validate-test:
+    name: Validate and test (${{ matrix.cli }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cli: [terraform, opentofu]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show module version
+        run: cat VERSION
+
+      - name: Setup Terraform
+        if: matrix.cli == 'terraform'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Setup OpenTofu
+        if: matrix.cli == 'opentofu'
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.10.2
+
+      - name: Terraform fmt check
+        if: matrix.cli == 'terraform'
+        run: terraform fmt -check -recursive
+
+      - name: OpenTofu fmt check
+        if: matrix.cli == 'opentofu'
+        run: tofu fmt -check -recursive
+
+      - name: Terraform init
+        if: matrix.cli == 'terraform'
+        run: terraform init -backend=false
+
+      - name: OpenTofu init
+        if: matrix.cli == 'opentofu'
+        run: tofu init -backend=false
+
+      - name: Terraform validate
+        if: matrix.cli == 'terraform'
+        run: terraform validate
+
+      - name: OpenTofu validate
+        if: matrix.cli == 'opentofu'
+        run: tofu validate
+
+      - name: Terraform test
+        if: matrix.cli == 'terraform'
+        run: terraform test
+
+      - name: OpenTofu test
+        if: matrix.cli == 'opentofu'
+        run: tofu test
+
+  security:
+    name: Lint and security scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show module version
+        run: cat VERSION
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: Show TFLint version
+        run: tflint --version
+
+      - name: Init TFLint
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint --recursive
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          quiet: true
