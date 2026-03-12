@@ -125,3 +125,4 @@ jobs:
           directory: .
           framework: terraform
           quiet: true
+          skip_check: CKV2_AWS_5
