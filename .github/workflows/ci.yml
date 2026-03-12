@@ -8,6 +8,8 @@ on:
 
 jobs:
   module-ci:
+    permissions:
+      contents: write
     uses: abjoshi2785/terraform-module-workflows/.github/workflows/terraform-module-ci.yml@main
     with:
       terraform_version: "1.9.8"
